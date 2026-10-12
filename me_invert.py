@@ -207,7 +207,7 @@ def main():
           f"({wav.min():.3f}-{wav.max():.3f} A), FOV {cube.nx}x{cube.ny} px at "
           f"{scale:.4f}\"/px; lines {lines}; far-wing point {wav[cont]:.3f} A; "
           f"fine grid {nfine} points; CRISP profile "
-          f"{'off' if args.no_profile else 'on'}")
+          f"{'off' if args.no_profile else 'on'}", flush=True)
 
     prev = None
     for k in scans:
@@ -217,7 +217,7 @@ def main():
             prev = np.ascontiguousarray(
                 fits.getdata(fout)[:len(PARAMS)].transpose(1, 2, 0),
                 dtype=np.float64)
-            print(f"scan {k}: exists, skipped")
+            print(f"scan {k}: exists, skipped", flush=True)
             continue
         t0 = time.time()
         d = cube.scan(k, crop=args.crop, binning=args.bin)   # (ny, nx, 4, nw)
