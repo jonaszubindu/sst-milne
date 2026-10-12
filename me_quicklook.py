@@ -141,7 +141,8 @@ def movie(files, mp4, fps, ffmpeg):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("dir", help="output directory of me_invert.py")
+    ap.add_argument("dir", help="output directory of me_invert.py (or a batch "
+                                "folder with one sub-folder per cube)")
     ap.add_argument("--scan", type=int, default=None,
                     help="scan for the overview (default: middle of the series)")
     ap.add_argument("--all-overviews", action="store_true",
@@ -150,10 +151,23 @@ def main():
     ap.add_argument("--fps", type=int, default=6)
     args = ap.parse_args()
 
-    files = sorted(glob.glob(os.path.join(args.dir, "me_scan*.fits")))
-    if not files:
-        raise SystemExit(f"no me_scan*.fits in {args.dir}")
-    ql = pathlib.Path(args.dir) / "quicklook"
+    # a batch output folder (one sub-folder per cube) -> every cube in it
+    if not glob.glob(os.path.join(args.dir, "me_scan*.fits")):
+        subs = sorted(pathlib.Path(p).parent for p in
+                      glob.glob(os.path.join(args.dir, "*", "me_scan*.fits")))
+        subs = sorted(set(subs))
+        if not subs:
+            raise SystemExit(f"no me_scan*.fits in {args.dir} or its sub-folders")
+        for sd in subs:
+            print(f"=== {sd.name}")
+            run_dir(str(sd), args)
+        return
+    run_dir(args.dir, args)
+
+
+def run_dir(dirname, args):
+    files = sorted(glob.glob(os.path.join(dirname, "me_scan*.fits")))
+    ql = pathlib.Path(dirname) / "quicklook"
     ql.mkdir(exist_ok=True)
     scans = {int(pathlib.Path(f).stem[7:]): f for f in files}
     pick = (list(scans) if args.all_overviews else

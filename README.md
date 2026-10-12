@@ -51,7 +51,8 @@ own `setup.py` and runs a smoke test (an inversion with 1 and N threads).
 If something is missing it stops and prints what to install. On Linux
 none of the macOS workarounds are needed (GCC + libgomp).
 
-Then, with `PYMILNE_DIR` pointing at the checkout:
+Then, with `PYMILNE_DIR` pointing at the checkout (a single cube; for a
+whole folder see *All cubes in a folder* below):
 
 ```bash
 export PYMILNE_DIR=$PWD/pyMilne
@@ -60,6 +61,21 @@ nohup python sst-milne/me_invert.py /path/to/nb_6302_..._im.fits \
 tr '\r' '\n' < me_AR13010.log | grep '^scan'          # progress
 python sst-milne/me_quicklook.py me_AR13010 --movie   # when done
 ```
+
+## All cubes in a folder
+
+```bash
+python me_invert.py /path/to/SST_data/ --out me_all --single-pass --nthreads $(nproc)
+python me_quicklook.py me_all --movie
+```
+
+Folders are searched recursively for `nb_6302*_im.fits` (`--pattern`);
+each cube gets its own sub-folder in `--out` (e.g.
+`me_all/6302_2022-05-16T08-28-21/`). Files and folders can be mixed. A
+failing cube is reported at the end and the others still run; finished
+scans are skipped on a rerun. `--single-pass` inverts every scan once
+(first scan: one pass, no outlier re-inversion; later scans still start
+from the previous one) -- faster, with more stuck pixels than the default.
 
 ## Run
 

@@ -6,8 +6,11 @@ dual-FPI transmission profile (crisp.py from the pyMilne repository), as in
 pyMilne's example_CRISP/invert_crisp.py. Run in the conda env that holds
 pyMilne (here: `Milne`).
 
-  python sst/me_invert.py nb_6302_..._im.fits --out me_AR13010 \
+  python me_invert.py nb_6302_..._im.fits --out me_AR13010 \
       [--scans 0-99] [--crop x0 x1 y0 y1] [--bin 2] [--nthreads 8]
+  python me_invert.py /data/2022-05-16/CRISP/ /data/2022-05-17/ --out me_all
+      # every nb_6302*_im.fits in the folders (recursive), one sub-folder
+      # per cube; --single-pass inverts each scan exactly once
 
 Per scan:
   1. read (memory-mapped), crop, bin;
@@ -174,11 +177,41 @@ def smooth_model(m, size=3):
     return out
 
 
+def find_cubes(inputs, pattern):
+    """Cube files from a mix of file and folder arguments (folders: pattern,
+    recursively), sorted, without duplicates."""
+    found = []
+    for x in inputs:
+        p = pathlib.Path(x)
+        found += sorted(p.rglob(pattern)) if p.is_dir() else [p]
+    seen, out = set(), []
+    for p in found:
+        if p.resolve() not in seen:
+            seen.add(p.resolve())
+            out.append(p)
+    return out
+
+
+def cube_tag(path):
+    """Short, unique output name for a cube: 'nb_6302_2022-05-16T08:28:21_...'
+    -> '6302_2022-05-16T08-28-21'."""
+    parts = path.name.split("_")
+    tag = "_".join(parts[1:3]) if len(parts) > 2 else path.stem
+    return tag.replace(":", "-")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cube")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("inputs", nargs="+",
+                    help="SSTRED cube(s) and/or folders holding them")
+    ap.add_argument("--pattern", default="nb_6302*_im.fits",
+                    help="cube file pattern inside folders")
+    ap.add_argument("--out", required=True,
+                    help="output folder (one sub-folder per cube for folders / several cubes)")
+    ap.add_argument("--single-pass", action="store_true",
+                    help="invert every scan once: no second pass on the first scan, "
+                         "no outlier re-inversion (faster, more outlier pixels)")
     ap.add_argument("--scans", default="all", help="e.g. 0-99 or 0,5,10-20")
     ap.add_argument("--crop", type=int, nargs=4, metavar=("X0", "X1", "Y0", "Y1"))
     ap.add_argument("--bin", type=int, default=1)
@@ -208,8 +241,32 @@ def main():
                          f"(now {PYMILNE_DIR}); crisp.py is expected in it or "
                          "in its example_CRISP/") from e
 
-    cube = SSTRedCube(args.cube)
-    out = pathlib.Path(args.out)
+    cubes = find_cubes(args.inputs, args.pattern)
+    if not cubes:
+        raise SystemExit(f"no cubes matching {args.pattern} in {args.inputs}")
+    many = len(cubes) > 1 or any(pathlib.Path(x).is_dir() for x in args.inputs)
+    print(f"{len(cubes)} cube(s); results in {args.out}"
+          + ("/<cube>/" if many else ""), flush=True)
+    failed = []
+    for n, path in enumerate(cubes, 1):
+        out = pathlib.Path(args.out) / cube_tag(path) if many else pathlib.Path(args.out)
+        print(f"\n=== [{n}/{len(cubes)}] {path.name} -> {out}", flush=True)
+        try:
+            invert_cube(path, out, args, ME)
+        except Exception as e:                    # keep going with the others
+            import traceback
+            traceback.print_exc()
+            failed.append((path.name, f"{type(e).__name__}: {e}"))
+    if failed:
+        print("\nFAILED:")
+        for name, msg in failed:
+            print(f"  {name}: {msg}")
+        sys.exit(1)
+
+
+def invert_cube(path, out, args, ME):
+    cube = SSTRedCube(path)
+    out = pathlib.Path(out)
     out.mkdir(parents=True, exist_ok=True)
     scans = parse_scans(args.scans, cube.nscan)
     wav = cube.wavelengths_A(scans[0])
@@ -265,13 +322,16 @@ def main():
             m0 = me.repeat_model(M0, ny, nx)
             m, chi2 = invert_blocks(me, m0, obs, sig, mu, args.nrandom_first,
                                     args.niter, rows)
-            m, chi2 = invert_blocks(me, smooth_model(m), obs, sig, mu,
-                                    args.nrandom_first, args.niter, rows)
+            if not args.single_pass:
+                m, chi2 = invert_blocks(me, smooth_model(m), obs, sig, mu,
+                                        args.nrandom_first, args.niter, rows)
         else:
             m, chi2 = invert_blocks(me, smooth_model(prev), obs, sig, mu,
                                     args.nrandom, args.niter, rows)
-        m, chi2, nfix = repair_outliers(me, m, chi2, obs, sig, mu,
-                                        max(4, args.nrandom), args.niter, valid)
+        nfix = 0
+        if not args.single_pass:
+            m, chi2, nfix = repair_outliers(me, m, chi2, obs, sig, mu,
+                                            max(4, args.nrandom), args.niter, valid)
         prev = m
 
         B, inc, azi = m[..., 0], m[..., 1], m[..., 2]
@@ -300,9 +360,10 @@ def main():
         h["SIGI"], h["SIGQ"], h["SIGU"], h["SIGV"] = args.sigma_i, *map(fin, noise)
         h["PROFILE"] = "none" if args.no_profile else "crisp dual_fpi erh=-0.001"
         h["NITER"] = args.niter
+        h["PASSES"] = ("single" if args.single_pass else "two-pass first scan + repair")
         h["NREPAIR"] = (nfix, "outlier pixels re-inverted")
         h["VQS"] = (fin(np.median(m[..., 3][qs])),
-                    "median vlos of quiet Sun [km/s] (not subtracted)")
+                    "QS median vlos [km/s], not subtracted")
         fits.PrimaryHDU(stack, h).writeto(fout, overwrite=True)
         print(f"scan {k} ({cube.time(k):%H:%M:%S}, mu {mu:.2f}): {ny}x{nx} px "
               f"in {time.time() - t0:.0f} s ({(~valid).mean() * 100:.0f} % padding), "
