@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.fits
+*.mp4
+me_*/
+.DS_Store
