@@ -27,6 +27,40 @@ schedules patched in a build copy, Eigen threading off). Checked on
 pyMilne's own `example_CRISP` (same maps as the reference) and for
 1- vs 8-thread identity.
 
+## On a Linux server
+
+```bash
+# code (once)
+git clone git@github.com:jonaszubindu/sst-milne.git
+git clone https://github.com/jaimedelacruz/pyMilne.git
+
+# python env (once) -- either a venv ...
+python3 -m venv ~/venvs/milne && source ~/venvs/milne/bin/activate
+pip install "numpy<2" scipy astropy matplotlib "cython<3"
+# ... or conda (also brings FFTW and Eigen 3.4 without root):
+# conda create -n milne -c conda-forge python=3.11 "numpy<2" scipy astropy \
+#     matplotlib "cython<3" fftw eigen && conda activate milne
+
+# build pyMilne (once per machine type: it compiles with -march=native)
+sst-milne/pymilne_build/build_linux.sh pyMilne
+```
+
+`build_linux.sh` checks GCC >= 10, finds FFTW3 and Eigen >= 3.4 (conda
+env or system), links Eigen as `pyMilne/eigen3`, builds with pyMilne's
+own `setup.py` and runs a smoke test (an inversion with 1 and N threads).
+If something is missing it stops and prints what to install. On Linux
+none of the macOS workarounds are needed (GCC + libgomp).
+
+Then, with `PYMILNE_DIR` pointing at the checkout:
+
+```bash
+export PYMILNE_DIR=$PWD/pyMilne
+nohup python sst-milne/me_invert.py /path/to/nb_6302_..._im.fits \
+    --out me_AR13010 --nthreads $(nproc) > me_AR13010.log 2>&1 &
+tr '\r' '\n' < me_AR13010.log | grep '^scan'          # progress
+python sst-milne/me_quicklook.py me_AR13010 --movie   # when done
+```
+
 ## Run
 
 ```bash
@@ -79,4 +113,5 @@ the first scan takes ~4x longer.
 | `me_quicklook.py` | overview plots and movies of the results |
 | `sstred.py` | SSTRED cube reader (wavelength, time, pointing, mu) |
 | `pymilne_build/setup_macos_arm64.py` | builds pyMilne on Apple silicon |
+| `pymilne_build/build_linux.sh` | checks dependencies and builds pyMilne on Linux |
 | `tools/make_test_cube.py` | SSTRED-layout test cube from the prepared AR13010 maps |
