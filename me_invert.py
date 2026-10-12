@@ -181,8 +181,16 @@ def main():
     ap.add_argument("--overwrite", action="store_true")
     args = ap.parse_args()
 
-    sys.path.insert(0, PYMILNE_DIR)
-    import MilneEddington as ME
+    # pyMilne ships crisp.py (CRISP transmission profile) only in example_CRISP/
+    sys.path[:0] = [PYMILNE_DIR, os.path.join(PYMILNE_DIR, "example_CRISP")]
+    try:
+        import MilneEddington as ME
+        if not args.no_profile:
+            import crisp  # noqa: F401
+    except ImportError as e:
+        raise SystemExit(f"{e}: set PYMILNE_DIR to the pyMilne checkout "
+                         f"(now {PYMILNE_DIR}); crisp.py is expected in it or "
+                         "in its example_CRISP/") from e
 
     cube = SSTRedCube(args.cube)
     out = pathlib.Path(args.out)
