@@ -103,13 +103,28 @@ def build_regions(wav, dw, use_profile):
     return regions, pos, lines, off
 
 
-def quiet_sun(I, V, cont):
-    """Mask of quiet-Sun pixels: weak polarisation, near-median intensity."""
+def valid_pixels(d):
+    """Pixels with data: finite everywhere and positive intensity. SSTRED
+    cubes pad the rotated/aligned field with NaN (or zeros)."""
+    with np.errstate(invalid="ignore"):
+        return np.isfinite(d).all(axis=(2, 3)) & (np.nan_to_num(d[:, :, 0]).min(axis=-1) > 0)
+
+
+def quiet_sun(I, V, cont, valid):
+    """Mask of quiet-Sun pixels: weak polarisation, near-median intensity
+    (valid pixels only)."""
     ic = I[..., cont]
-    pol = np.max(np.abs(V), axis=-1) / np.maximum(I.max(axis=-1), 1e-30)
-    med = np.median(ic)
-    qs = (pol < np.percentile(pol, 30)) & (np.abs(ic / med - 1) < 0.1)
-    return qs if qs.sum() > 200 else np.abs(ic / med - 1) < 0.1
+    pol = np.zeros(ic.shape)
+    pol[valid] = np.abs(V[valid]).max(axis=-1) / I[valid].max(axis=-1)
+    med = np.median(ic[valid])
+    near = valid & (np.abs(ic / med - 1) < 0.1)
+    qs = near & (pol < np.percentile(pol[valid], 30))
+    return qs if qs.sum() > 200 else near
+
+
+def fin(x):
+    """FITS headers take no NaN: non-finite floats become the string 'NaN'."""
+    return float(x) if np.isfinite(x) else "NaN"
 
 
 def invert_blocks(me, model, obs, sig, mu, nrandom, niter, rows):
@@ -125,12 +140,13 @@ def invert_blocks(me, model, obs, sig, mu, nrandom, niter, rows):
     return out_m, out_chi
 
 
-def repair_outliers(me, m, chi2, obs, sig, mu, nrandom, niter):
+def repair_outliers(me, m, chi2, obs, sig, mu, nrandom, niter, valid):
     """Re-invert pixels stuck in a wrong minimum (chi2 > 3x the median, or
     inclination > 30 deg off its 5x5 median) from the median-filtered
     neighbourhood; keep the new fit only where chi2 improves."""
     inc_med = ndimage.median_filter(m[..., 1], 5)
-    bad = (chi2 > 3 * np.median(chi2)) | (np.abs(m[..., 1] - inc_med) > np.radians(30))
+    bad = valid & ((chi2 > 3 * np.median(chi2[valid]))
+                   | (np.abs(m[..., 1] - inc_med) > np.radians(30)))
     n = int(bad.sum())
     if n == 0:
         return m, chi2, 0
@@ -222,12 +238,20 @@ def main():
         t0 = time.time()
         d = cube.scan(k, crop=args.crop, binning=args.bin)   # (ny, nx, 4, nw)
         ny, nx = d.shape[:2]
-        qs = quiet_sun(d[:, :, 0], d[:, :, 3], cont)
+        valid = valid_pixels(d)
+        if valid.sum() < 1000:
+            print(f"scan {k}: only {valid.sum()} valid pixels, skipped", flush=True)
+            continue
+        d[~valid] = 0.0
+        qs = quiet_sun(d[:, :, 0], d[:, :, 3], cont, valid)
         icq = float(np.median(d[:, :, 0, cont][qs]))
         d /= icq
         noise = [1.4826 * float(np.median(np.abs(d[:, :, s, cont][qs]
                                                   - np.median(d[:, :, s, cont][qs]))))
                  for s in (1, 2, 3)]
+        # padding gets a quiet-Sun profile, so the fits there stay tame;
+        # its results are written as NaN
+        d[~valid] = d[qs].mean(axis=0)
         obs = np.zeros((ny, nx, 4, nfine), dtype=np.float32)
         sig = np.full((4, nfine), 1e32, dtype=np.float32)
         for idx, p in pos:
@@ -247,7 +271,7 @@ def main():
             m, chi2 = invert_blocks(me, smooth_model(prev), obs, sig, mu,
                                     args.nrandom, args.niter, rows)
         m, chi2, nfix = repair_outliers(me, m, chi2, obs, sig, mu,
-                                        max(4, args.nrandom), args.niter)
+                                        max(4, args.nrandom), args.niter, valid)
         prev = m
 
         B, inc, azi = m[..., 0], m[..., 1], m[..., 2]
@@ -256,6 +280,7 @@ def main():
                                           B * np.cos(inc), B * np.sin(inc),
                                           np.degrees(inc), np.degrees(azi)])]
                                ).astype(np.float32)
+        stack[:, ~valid] = np.nan
         h = fits.Header()
         for i, nm in enumerate(PARAMS + EXTRA):
             h[f"PAR{i:02d}"] = nm
@@ -263,23 +288,25 @@ def main():
         h["CUBE"] = os.path.basename(cube.path)
         h["SCAN"] = k
         h["DATE-OBS"] = cube.time(k).isoformat()
-        h["MU"] = (mu, "at the field centre")
-        h["XCEN"], h["YCEN"] = x_c, y_c
+        h["MU"] = (fin(mu), "at the field centre")
+        h["XCEN"], h["YCEN"] = fin(x_c), fin(y_c)
         h["PIXSCALE"] = (scale * args.bin, "arcsec/px after binning")
         h["BIN"] = args.bin
         if args.crop:
             h["CROP"] = " ".join(map(str, args.crop))
-        h["ICQS"] = (icq, "quiet-Sun I at the far-wing point (cube units)")
+        h["ICQS"] = (fin(icq), "quiet-Sun far-wing I [cube units]")
+        h["NVALID"] = (int(valid.sum()), "pixels with data; rest NaN")
         h["WINGWAV"] = (float(wav[cont]), "far-wing wavelength [A]")
-        h["SIGI"], h["SIGQ"], h["SIGU"], h["SIGV"] = args.sigma_i, *noise
+        h["SIGI"], h["SIGQ"], h["SIGU"], h["SIGV"] = args.sigma_i, *map(fin, noise)
         h["PROFILE"] = "none" if args.no_profile else "crisp dual_fpi erh=-0.001"
         h["NITER"] = args.niter
         h["NREPAIR"] = (nfix, "outlier pixels re-inverted")
-        h["VQS"] = (float(np.median(m[..., 3][qs])),
+        h["VQS"] = (fin(np.median(m[..., 3][qs])),
                     "median vlos of quiet Sun [km/s] (not subtracted)")
         fits.PrimaryHDU(stack, h).writeto(fout, overwrite=True)
         print(f"scan {k} ({cube.time(k):%H:%M:%S}, mu {mu:.2f}): {ny}x{nx} px "
-              f"in {time.time() - t0:.0f} s, <chi2> {np.median(chi2):.2f}, "
+              f"in {time.time() - t0:.0f} s ({(~valid).mean() * 100:.0f} % padding), "
+              f"<chi2> {np.median(chi2[valid]):.2f}, "
               f"{nfix} px re-inverted, "
               f"noise QUV {noise[0]:.1e} {noise[1]:.1e} {noise[2]:.1e} -> {fout.name}",
               flush=True)

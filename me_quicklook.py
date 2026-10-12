@@ -37,6 +37,12 @@ def load(path):
     return {n: d[i] for i, n in enumerate(names)}, hd
 
 
+def vqs(hd):
+    """Quiet-Sun vlos from the header (0 if missing or 'NaN')."""
+    v = hd.get("VQS", 0.0)
+    return float(v) if isinstance(v, (int, float)) and np.isfinite(v) else 0.0
+
+
 def find_ffmpeg():
     """First ffmpeg that actually runs (an x86 build can be installed but
     unusable on Apple silicon)."""
@@ -62,7 +68,7 @@ def overview(m, hd, png):
     ny, nx = m["B"].shape
     s = hd.get("PIXSCALE", 1.0)
     ext = [0, nx * s, 0, ny * s]
-    v = m["vlos"] - hd.get("VQS", 0.0)
+    v = m["vlos"] - vqs(hd)
     panels = [
         ("I_wing", "intensity (far wing) / I$_{QS}$", "gray", pct(m["I_wing"])),
         ("B", "|B| [G]", "magma", (0, pct(m["B"], 0, 99.5)[1])),
@@ -112,7 +118,7 @@ def movie(files, mp4, fps, ffmpeg):
                             sharex=True, sharey=True)
     ims = []
     for ax, (key, lab, cmap, lim) in zip(axs.flat, spec):
-        img = m0["vlos"] - hd0.get("VQS", 0.0) if key == "v" else m0[key]
+        img = m0["vlos"] - vqs(hd0) if key == "v" else m0[key]
         im = ax.imshow(img, origin="lower", cmap=cmap, vmin=lim[0], vmax=lim[1],
                        extent=ext, interpolation="nearest")
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
@@ -125,7 +131,7 @@ def movie(files, mp4, fps, ffmpeg):
         for f in files:
             m, hd = load(f)
             for im, key in ims:
-                im.set_data(m["vlos"] - hd.get("VQS", 0.0) if key == "v" else m[key])
+                im.set_data(m["vlos"] - vqs(hd) if key == "v" else m[key])
             title.set_text(f"scan {hd.get('SCAN')}  {hd.get('DATE-OBS', '')[:19]}  "
                            f"mu = {hd.get('MU', np.nan):.2f}")
             writer.grab_frame()
