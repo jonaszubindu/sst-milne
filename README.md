@@ -77,6 +77,34 @@ scans are skipped on a rerun. `--single-pass` inverts every scan once
 (first scan: one pass, no outlier re-inversion; later scans still start
 from the previous one) -- faster, with more stuck pixels than the default.
 
+## On a Slurm cluster
+
+pyMilne parallelises with OpenMP threads inside one process (not MPI), so
+the unit of parallel work across nodes is the cube: `slurm/me_invert_array.sbatch`
+runs a job array with one cube per task on a whole node (all its CPUs as
+pyMilne threads); scans within a cube stay sequential.
+
+```bash
+# once: environment (conda-forge) and a pyMilne build on a compute node
+conda create -n milne -c conda-forge python=3.11 "numpy<2" scipy astropy \
+    matplotlib "cython<3" fftw eigen ffmpeg
+sbatch sst-milne/slurm/build_pymilne.sbatch          # -march=native: build on a node
+
+# per batch of cubes
+find /path/to/SST_data -name 'nb_6302*_im.fits' | sort > cubes.txt
+sbatch --array=0-$(( $(wc -l < cubes.txt) - 1 )) \
+    sst-milne/slurm/me_invert_array.sbatch cubes.txt /path/to/me_out --single-pass
+```
+
+Defaults: partition `aiub`, 24 h, `PYMILNE_DIR=/unibe/scratch/zbindenj/pyMilne`,
+`SST_MILNE_DIR=/unibe/scratch/zbindenj/sst-milne`, `CONDA_ENV=milne`
+(override with `sbatch --export=ALL,PYMILNE_DIR=...`; uncomment the
+reservation line if needed). Each task writes `<out>/<cube tag>/` with
+the scans and the quicklook overview + movie (`--per-cube-dirs
+--quicklook`), and logs `me_<job>_<task>.out` with pyMilne's progress
+counter filtered out. Throttle with `--array=0-K%N`; reruns skip finished
+scans.
+
 ## Run
 
 ```bash
@@ -131,3 +159,5 @@ the first scan takes ~4x longer.
 | `pymilne_build/setup_macos_arm64.py` | builds pyMilne on Apple silicon |
 | `pymilne_build/build_linux.sh` | checks dependencies and builds pyMilne on Linux |
 | `tools/make_test_cube.py` | SSTRED-layout test cube from the prepared AR13010 maps |
+| `slurm/me_invert_array.sbatch` | job array, one cube per node |
+| `slurm/build_pymilne.sbatch` | builds pyMilne on a compute node |

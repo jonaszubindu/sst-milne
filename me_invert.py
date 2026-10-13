@@ -209,6 +209,12 @@ def main():
                     help="cube file pattern inside folders")
     ap.add_argument("--out", required=True,
                     help="output folder (one sub-folder per cube for folders / several cubes)")
+    ap.add_argument("--per-cube-dirs", action="store_true",
+                    help="one sub-folder per cube in --out even for a single cube "
+                         "(Slurm array tasks)")
+    ap.add_argument("--quicklook", action="store_true",
+                    help="after each cube: overview of the middle scan and the movie "
+                         "(me_quicklook.py)")
     ap.add_argument("--single-pass", action="store_true",
                     help="invert every scan once: no second pass on the first scan, "
                          "no outlier re-inversion (faster, more outlier pixels)")
@@ -244,7 +250,8 @@ def main():
     cubes = find_cubes(args.inputs, args.pattern)
     if not cubes:
         raise SystemExit(f"no cubes matching {args.pattern} in {args.inputs}")
-    many = len(cubes) > 1 or any(pathlib.Path(x).is_dir() for x in args.inputs)
+    many = (args.per_cube_dirs or len(cubes) > 1
+            or any(pathlib.Path(x).is_dir() for x in args.inputs))
     print(f"{len(cubes)} cube(s); results in {args.out}"
           + ("/<cube>/" if many else ""), flush=True)
     failed = []
@@ -372,6 +379,15 @@ def invert_cube(path, out, args, ME):
               f"noise QUV {noise[0]:.1e} {noise[1]:.1e} {noise[2]:.1e} -> {fout.name}",
               flush=True)
     cube.close()
+    if args.quicklook:
+        import argparse as _ap
+        import me_quicklook
+        try:
+            me_quicklook.run_dir(str(out), _ap.Namespace(
+                scan=None, all_overviews=False, movie=True, fps=6))
+        except Exception as e:                    # e.g. no ffmpeg on the node
+            print(f"quicklook failed ({type(e).__name__}: {e}); run me_quicklook.py "
+                  "later", flush=True)
 
 
 if __name__ == "__main__":
