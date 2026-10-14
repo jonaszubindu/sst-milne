@@ -402,7 +402,7 @@ def invert_cube(path, out, args, ME):
         try:
             me_quicklook.run_dir(str(out), _ap.Namespace(
                 scan=None, all_overviews=False, movie=True, fps=6))
-        except Exception as e:                    # e.g. no ffmpeg on the node
+        except (Exception, SystemExit) as e:      # never fail the inversion
             print(f"quicklook failed ({type(e).__name__}: {e}); run me_quicklook.py "
                   "later", flush=True)
 

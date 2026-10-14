@@ -171,7 +171,7 @@ def main():
         print(f"=== {sd}", flush=True)
         try:
             run_dir(str(sd), args)
-        except Exception as e:                # keep going with the others
+        except (Exception, SystemExit) as e:  # keep going with the others
             print(f"   FAILED: {type(e).__name__}: {e}", flush=True)
             failed.append(sd)
     print(f"\n{len(targets) - len(failed)}/{len(targets)} cube folders done"
@@ -206,7 +206,11 @@ def run_dir(dirname, args):
     if args.movie:
         ff = find_ffmpeg()
         if ff is None:
-            raise SystemExit("no working ffmpeg found (set FFMPEG=/path/to/ffmpeg)")
+            # not fatal: the overview is written, the other cubes still run
+            print("   NO MOVIE: no working ffmpeg found -- install it in this "
+                  "environment (conda install -c conda-forge ffmpeg) or set "
+                  "FFMPEG=/path/to/ffmpeg", flush=True)
+            return
         mp4 = ql / "movie_me.mp4"
         movie(files, mp4, args.fps, ff)
         print(f"-> {mp4}  ({len(files)} scans, ffmpeg {ff})")

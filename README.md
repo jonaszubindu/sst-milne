@@ -40,9 +40,10 @@ git clone https://github.com/jaimedelacruz/pyMilne.git
 # python env (once) -- either a venv ...
 python3 -m venv ~/venvs/milne && source ~/venvs/milne/bin/activate
 pip install "numpy<2" scipy astropy matplotlib "cython<3"
-# ... or conda (also brings FFTW and Eigen 3.4 without root):
+# (movies need an ffmpeg binary on the PATH)
+# ... or conda (also brings FFTW, Eigen 3.4 and ffmpeg without root):
 # conda create -n milne -c conda-forge python=3.11 "numpy<2" scipy astropy \
-#     matplotlib "cython<3" fftw eigen && conda activate milne
+#     matplotlib "cython<3" fftw eigen ffmpeg && conda activate milne
 
 # build pyMilne (once per machine type: it compiles with -march=native)
 sst-milne/pymilne_build/build_linux.sh pyMilne
