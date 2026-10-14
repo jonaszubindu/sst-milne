@@ -120,7 +120,13 @@ whether overview and movie exist and are newer than the newest scan; it
 prints the `--array` list of incomplete cubes (run it from the folder the
 list's relative paths refer to). The quicklook job (re)makes only missing
 or outdated movies (`me_quicklook.py --skip-existing`, several folders at
-once).
+once). To collect them in one local folder, each file prefixed with its
+cube tag (`<tag>_movie_me.mp4`, `<tag>_overview_scanNNNN.png`):
+
+```bash
+sst-milne/tools/pull_quicklooks.sh ~/Desktop/me_quicklooks \
+    ubelix:/unibe/scratch/zbindenj/me_out ubelix:/unibe/scratch/zbindenj/me_out_17
+```
 
 ## Run
 
@@ -189,3 +195,4 @@ the first scan takes ~4x longer.
 | `slurm/build_pymilne.sbatch` | builds pyMilne on a compute node |
 | `slurm/me_quicklook.sbatch` | missing/outdated quicklooks on a compute node |
 | `tools/me_status.py` | which cubes are inverted and have quicklooks |
+| `tools/pull_quicklooks.sh` | quicklooks of all cubes into one local folder, renamed by cube |
