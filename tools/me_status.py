@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+"""Which cubes of a list are inverted, and which have quicklooks?
+
+  python tools/me_status.py cubes.txt /path/to/me_out [/path/to/me_out_17 ...]
+
+For every cube in the list (one path per line, as given to the Slurm
+array; relative paths are resolved from the current directory) it looks
+up the cube's folder (<out>/<cube tag>/) in each output folder and
+prints: scans in the cube, scans inverted, overview and movie present and
+up to date (newer than the newest scan). At the end it prints the
+`--array` list of cubes without a complete inversion (line numbers of
+the list, for sbatch) and the cube folders without an up-to-date movie.
+
+A cube can legitimately end with fewer scans than it has, if scans were
+skipped for missing data -- check its log (`grep skipped me_<job>_<task>.out`).
+"""
+
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from me_invert import cube_tag  # noqa: E402
+from sstred import SSTRedCube   # noqa: E402
+
+
+def main():
+    if len(sys.argv) < 3:
+        sys.exit(__doc__)
+    lst, outs = pathlib.Path(sys.argv[1]), [pathlib.Path(p) for p in sys.argv[2:]]
+    cubes = [l.strip() for l in lst.read_text().splitlines() if l.strip()]
+    incomplete, no_movie, unknown = [], [], []
+    print(f"{'#':>3s}  {'cube tag':28s} {'scans':>5s} {'done':>5s}  overview  movie   folder")
+    for i, c in enumerate(cubes):
+        path = pathlib.Path(c)
+        tag = cube_tag(path)
+        try:
+            cube = SSTRedCube(path)
+            nscan = cube.nscan
+            cube.close()
+        except Exception as e:
+            nscan = None
+            unknown.append(i)
+            print(f"{i:3d}  {tag:28s}   cannot open the cube ({type(e).__name__}) -- "
+                  "scan count unknown; run from the folder the list's paths refer to")
+        ns = "?" if nscan is None else str(nscan)
+        hits = [o / tag for o in outs if (o / tag).is_dir()]
+        if not hits:
+            print(f"{i:3d}  {tag:28s} {ns:>5s} {0:5d}  -         -       (no results)")
+            incomplete.append(i)
+            continue
+        best = 0
+        for d in hits:
+            files = sorted(d.glob("me_scan*.fits"))
+            best = max(best, len(files))
+            newest = max((f.stat().st_mtime for f in files), default=0)
+            ql = d / "quicklook"
+            ov = sorted(ql.glob("overview_scan*.png"))
+            mv = ql / "movie_me.mp4"
+            ov_ok = bool(ov) and all(p.stat().st_mtime > newest for p in ov)
+            mv_ok = mv.exists() and mv.stat().st_mtime > newest
+            state = lambda ok, exists: "yes" if ok else ("old" if exists else "-")
+            print(f"{i:3d}  {tag:28s} {ns:>5s} {len(files):5d}  "
+                  f"{state(ov_ok, bool(ov)):8s}  {state(mv_ok, mv.exists()):6s}  {d.parent}")
+            if files and not mv_ok:
+                no_movie.append(str(d))
+        # complete if any output folder holds all scans of the cube
+        if nscan is not None and best < nscan:
+            incomplete.append(i)
+    inc = sorted(set(incomplete))
+    done = len(cubes) - len(set(inc) | set(unknown))
+    print(f"\n{done}/{len(cubes)} cubes completely inverted"
+          + (f"; {len(unknown)} could not be opened (lines {','.join(map(str, unknown))})"
+             if unknown else ""))
+    if inc:
+        print(f"incomplete (resubmit with the same list and output folder):\n"
+              f"  --array={','.join(map(str, inc))}")
+    if no_movie:
+        print(f"{len(no_movie)} cube folder(s) without an up-to-date movie, e.g.:\n"
+              f"  python me_quicklook.py {' '.join(sorted({str(pathlib.Path(p).parent) for p in no_movie}))} "
+              "--movie --skip-existing")
+
+
+if __name__ == "__main__":
+    main()

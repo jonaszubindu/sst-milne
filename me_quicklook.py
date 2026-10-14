@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Overview plots and movies of the ME results written by me_invert.py.
 
-  python sst/me_quicklook.py me_AR13010 [--scan 40] [--movie] [--fps 6]
+  python me_quicklook.py me_AR13010 [--scan 40] [--movie] [--fps 6]
+  python me_quicklook.py me_out me_out_17 --movie --skip-existing   # batch folders
 
 Writes into <dir>/quicklook/:
   overview_scanNNNN.png   9 panels: far-wing intensity, |B|, B_los, B_trans,
@@ -32,7 +33,8 @@ from astropy.io import fits
 
 def load(path):
     with fits.open(path) as h:
-        d, hd = h[0].data.astype(float), h[0].header
+        # float32: a 2900x2900 scan has 15 planes (~0.5 GB in float32)
+        d, hd = np.asarray(h[0].data, dtype=np.float32), h[0].header
     names = [hd[f"PAR{i:02d}"] for i in range(d.shape[0])]
     return {n: d[i] for i, n in enumerate(names)}, hd
 
@@ -141,28 +143,46 @@ def movie(files, mp4, fps, ffmpeg):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("dir", help="output directory of me_invert.py (or a batch "
-                                "folder with one sub-folder per cube)")
+    ap.add_argument("dirs", nargs="+", help="output directory of me_invert.py, or "
+                    "batch folders with one sub-folder per cube")
     ap.add_argument("--scan", type=int, default=None,
                     help="scan for the overview (default: middle of the series)")
     ap.add_argument("--all-overviews", action="store_true",
                     help="an overview PNG for every scan")
     ap.add_argument("--movie", action="store_true")
     ap.add_argument("--fps", type=int, default=6)
+    ap.add_argument("--skip-existing", action="store_true",
+                    help="skip cubes whose quicklook is newer than their newest scan")
     args = ap.parse_args()
 
-    # a batch output folder (one sub-folder per cube) -> every cube in it
-    if not glob.glob(os.path.join(args.dir, "me_scan*.fits")):
-        subs = sorted(pathlib.Path(p).parent for p in
-                      glob.glob(os.path.join(args.dir, "*", "me_scan*.fits")))
-        subs = sorted(set(subs))
-        if not subs:
-            raise SystemExit(f"no me_scan*.fits in {args.dir} or its sub-folders")
-        for sd in subs:
-            print(f"=== {sd.name}")
+    # batch output folders (one sub-folder per cube) -> every cube in them
+    targets = []
+    for d in args.dirs:
+        if glob.glob(os.path.join(d, "me_scan*.fits")):
+            targets.append(pathlib.Path(d))
+        else:
+            subs = sorted({pathlib.Path(p).parent for p in
+                           glob.glob(os.path.join(d, "*", "me_scan*.fits"))})
+            if not subs:
+                print(f"no me_scan*.fits in {d} or its sub-folders")
+            targets += subs
+    failed = []
+    for sd in targets:
+        print(f"=== {sd}", flush=True)
+        try:
             run_dir(str(sd), args)
-        return
-    run_dir(args.dir, args)
+        except Exception as e:                # keep going with the others
+            print(f"   FAILED: {type(e).__name__}: {e}", flush=True)
+            failed.append(sd)
+    print(f"\n{len(targets) - len(failed)}/{len(targets)} cube folders done"
+          + (": FAILED " + ", ".join(map(str, failed)) if failed else ""))
+
+
+def up_to_date(ql, files, movie):
+    """Quicklook exists and is newer than the newest scan file."""
+    newest = max(os.path.getmtime(f) for f in files)
+    want = [ql / "movie_me.mp4"] if movie else sorted(ql.glob("overview_scan*.png"))
+    return bool(want) and all(p.exists() and p.stat().st_mtime > newest for p in want)
 
 
 def run_dir(dirname, args):
@@ -172,6 +192,9 @@ def run_dir(dirname, args):
         return
     ql = pathlib.Path(dirname) / "quicklook"
     ql.mkdir(exist_ok=True)
+    if getattr(args, "skip_existing", False) and up_to_date(ql, files, args.movie):
+        print("   quicklook up to date, skipped")
+        return
     scans = {int(pathlib.Path(f).stem[7:]): f for f in files}
     pick = (list(scans) if args.all_overviews else
             [args.scan if args.scan is not None else sorted(scans)[len(scans) // 2]])

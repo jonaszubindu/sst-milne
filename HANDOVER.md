@@ -29,11 +29,11 @@ an outflow or edge inflow is visible at SST but lost at HMI.
 | what | where |
 |---|---|
 | this repo | GitHub `jonaszubindu/sst-milne` (private); Mac `~/Desktop/sst-milne`; sml server `/sml/zbindenj/sst-milne`; cluster `/unibe/scratch/zbindenj/sst-milne` |
-| pyMilne (upstream, unmodified) | Mac `~/Documents/GitHub/pyMilne` (built: `pyMilne.cpython-311-darwin.so`, conda env `Milne`); server `/sml/zbindenj/pyMilne` (venv `~/venvs/milne`, Python 3.8); cluster `/unibe/scratch/zbindenj/pyMilne` (conda env `milne`) **(to confirm: builds on server/cluster)** |
+| pyMilne (upstream, unmodified) | Mac `~/Documents/GitHub/pyMilne` (built: `pyMilne.cpython-311-darwin.so`, conda env `Milne`); server `/sml/zbindenj/pyMilne` (venv `~/venvs/milne`, Python 3.8); cluster `/unibe/scratch/zbindenj/pyMilne` (conda env `milne`) -- all built |
 | AR 13010 cube | sml `/sml/zbindenj/idl/SST_data/4th_batch/2022-05-16/CRISP/nb_6302_2022-05-16T08:28:21_08:28:21=0-19_stokes_corrected_export2023-02-24T09:32:31_im.fits` — 20 scans, 13 tunings 6302.198–6302.758 Å, 1315×1313 px at 0.0592″/px, NaN padding |
 | 2025-06-17 cube | cluster, `20250617/crisp/nb_6302_2025-06-17T16:00:07_16:00:07=0-50_stokes_corrected_im.fits` relative to the job's submit dir — 51 scans, 12 tunings 6302.202–6302.682 Å, 2943×2945 px at 0.0441″/px |
 | other comparison cubes | **(to confirm)** list them in `cubes.txt` on the cluster |
-| results | sml: `/sml/zbindenj/me_AR13010` (default two-pass run, possibly stopped/partial), `/sml/zbindenj/me_all` (single-pass batch, if started); cluster: `/unibe/scratch/zbindenj/me_out_17/<cube tag>/` (job 110736) **(to confirm which are complete)** |
+| results | sml: `/sml/zbindenj/me_AR13010` (default two-pass run, possibly stopped/partial), `/sml/zbindenj/me_all` (single-pass batch, if started); cluster: `/unibe/scratch/zbindenj/me_out/<cube tag>/` (job 110587) and `/unibe/scratch/zbindenj/me_out_17/<cube tag>/` (job 110736) -- completeness: `tools/me_status.py` |
 | prepared AR 13010 maps (test data only) | Google Drive `My Drive/Daniel-Master-Arbeit/Maps_for_Daniel/Prepared_map_SIR_AR13010_nb_6302_2022-05-16T08:28:21_frame_{0,11,19}.fits` — (4, 12, 550, 600); 13-point grid 6302.4931 + (−0.28…+0.20) Å in 40 mÅ steps, slot 1 a −1 placeholder |
 
 ## Run history
@@ -52,7 +52,13 @@ an outflow or edge inflow is visible at SST but lost at HMI.
    valid pixels") because one tuning had no data → fixed (977c12c): such
    tunings are now left out per scan. The skipped tasks need to be
    resubmitted (`sbatch --array=<tasks> ...`, same `cubes.txt` and output
-   folder) **(to confirm whether done)**.
+   folder) -- done (confirmed 2026-10-14). The pyMilne builds on the
+   server and the cluster are in the listed places (confirmed).
+4. Earlier cluster job 110587 (output `/unibe/scratch/zbindenj/me_out`,
+   2026-10-13, before the empty-tuning fix) also skipped cubes with "only
+   0 valid pixels", e.g. `20250625/crisp/nb_6302_2025-06-25T10:54:22...`
+   (3 scans, 12 tunings, 2805x2821 px): rerun those tasks with that job's
+   cube list and `me_out` (`tools/me_status.py` lists them).
 
 ## Problems already solved (do not re-debug)
 

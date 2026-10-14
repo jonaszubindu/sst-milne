@@ -108,6 +108,20 @@ the scans and the quicklook overview + movie (`--per-cube-dirs
 counter filtered out. Throttle with `--array=0-K%N`; reruns skip finished
 scans.
 
+Check what is done and make the missing quicklooks:
+
+```bash
+python sst-milne/tools/me_status.py cubes.txt /path/to/me_out [/path/to/me_out_17 ...]
+sbatch sst-milne/slurm/me_quicklook.sbatch /path/to/me_out [/path/to/me_out_17 ...]
+```
+
+`me_status.py` lists per cube the scans in the cube and inverted, and
+whether overview and movie exist and are newer than the newest scan; it
+prints the `--array` list of incomplete cubes (run it from the folder the
+list's relative paths refer to). The quicklook job (re)makes only missing
+or outdated movies (`me_quicklook.py --skip-existing`, several folders at
+once).
+
 ## Run
 
 ```bash
@@ -173,3 +187,5 @@ the first scan takes ~4x longer.
 | `tools/make_test_cube.py` | SSTRED-layout test cube from the prepared AR13010 maps |
 | `slurm/me_invert_array.sbatch` | job array, one cube per node |
 | `slurm/build_pymilne.sbatch` | builds pyMilne on a compute node |
+| `slurm/me_quicklook.sbatch` | missing/outdated quicklooks on a compute node |
+| `tools/me_status.py` | which cubes are inverted and have quicklooks |
