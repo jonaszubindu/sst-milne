@@ -8,6 +8,9 @@ not part of this yet. Split out of
 [moat-flow-onset](https://github.com/jonaszubindu/moat-flow-onset), the
 HMI moat-flow study it complements.
 
+Agents and new maintainers: read `HANDOVER.md` (state, solved problems,
+open decisions) and `CLAUDE.md` (working conventions).
+
 ## pyMilne on Apple silicon
 
 pyMilne itself is not part of this repository: clone
@@ -118,18 +121,24 @@ Useful options of `me_invert.py`: `--scans 0-99`, `--crop x0 x1 y0 y1`,
 profile: faster, less exact), `--overwrite`. Existing scans are skipped,
 so an interrupted run resumes.
 
-What it does per scan: read (memory-mapped) → normalise to the quiet-Sun
-intensity at the far-wing point → noise in Q, U, V measured in the quiet
-Sun → observed points on a regular 10 mÅ grid convolved with the CRISP
-dual-FPI profile (as in pyMilne's `example_CRISP`) → inversion in row
-blocks (first scan: two passes, 4 randomisations; later scans start from
-the previous scan) → re-inversion of outlier pixels.
+What it does per scan: read (memory-mapped) → leave out tunings without
+data in most of the field, mark padding pixels (NaN/zero) invalid →
+normalise to the quiet-Sun intensity at the far-wing point (farthest
+tuning with data) → noise in Q, U, V measured in the quiet Sun → observed
+points on a regular 10 mÅ grid convolved with the CRISP dual-FPI profile
+(as in pyMilne's `example_CRISP`) → inversion in row blocks (first scan:
+two passes, 4 randomisations; later scans start from the previous scan;
+padding pixels get a quiet-Sun profile) → re-inversion of outlier pixels
+→ padding written as NaN.
 
 Output `me_scanNNNN.fits`: 15 planes — B [G], inc, azi [rad], vlos
 [km/s], vdop [Å], eta0, damp, S0, S1, chi2, I_wing (normalised far-wing
-intensity), B_los, B_trans [G], inc, azi [deg]. Header: time, mu, pointing,
-plate scale, normalisation, noise, settings, `VQS` (quiet-Sun median vlos,
-not subtracted).
+intensity), B_los, B_trans [G], inc, azi [deg] (plane names in `PAR00`…).
+Header: `DATE-OBS`, `SCAN`, `MU`, `XCEN`/`YCEN`, `PIXSCALE`, `BIN`, `CROP`,
+`ICQS` (quiet-Sun normalisation), `WINGWAV` (far-wing tuning used),
+`NTUNE` (tunings used), `NVALID` (pixels with data), `SIGI/Q/U/V`,
+`PROFILE`, `NITER`, `PASSES`, `NREPAIR` (outliers re-inverted), `VQS`
+(quiet-Sun median vlos, not subtracted).
 
 Speed (M-series, 8 threads, CRISP profile on): ~3400 px/s for scans
 started from the previous one, i.e. ~5 min per scan for a 1000×1000 FOV;
@@ -145,9 +154,12 @@ the first scan takes ~4x longer.
   small Doppler width) in coherent patches; the outlier pass only fixes
   isolated pixels. pyMilne's spatially regularised inversion is the
   remedy if these patches matter.
-- Tested on an SSTRED-layout cube built from the prepared AR13010 maps
+- Developed on SSTRED-layout test cubes from the prepared AR13010 maps
   (`tools/make_test_cube.py`; 2022-05-16 08:28:21, frames 0/11/19;
-  11 tunings −280…+160 mÅ), not yet on an original SSTRED 6302 cube.
+  11 tunings −280…+160 mÅ) and run on the original SSTRED cubes (AR13010
+  2022-05-16, 2025-06-17 and others; see `HANDOVER.md`).
+- With a tuning left out, the far-wing reference sits deeper in the line
+  wing, so the measured noise (`SIGQ/U/V`) comes out higher.
 
 ## Files
 
