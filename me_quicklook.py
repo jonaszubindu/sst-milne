@@ -167,6 +167,9 @@ def main():
 
 def run_dir(dirname, args):
     files = sorted(glob.glob(os.path.join(dirname, "me_scan*.fits")))
+    if not files:
+        print(f"no me_scan*.fits in {dirname} -- nothing to plot")
+        return
     ql = pathlib.Path(dirname) / "quicklook"
     ql.mkdir(exist_ok=True)
     scans = {int(pathlib.Path(f).stem[7:]): f for f in files}

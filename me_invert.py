@@ -106,11 +106,12 @@ def build_regions(wav, dw, use_profile):
     return regions, pos, lines, off
 
 
-def valid_pixels(d):
-    """Pixels with data: finite everywhere and positive intensity. SSTRED
-    cubes pad the rotated/aligned field with NaN (or zeros)."""
+def tuning_good(d):
+    """(ny, nx, ntune): data present at that pixel and tuning -- all four
+    Stokes finite and I > 0. SSTRED pads the rotated/aligned field with NaN
+    (or zeros) and fills a tuning that was not recorded the same way."""
     with np.errstate(invalid="ignore"):
-        return np.isfinite(d).all(axis=(2, 3)) & (np.nan_to_num(d[:, :, 0]).min(axis=-1) > 0)
+        return np.isfinite(d).all(axis=2) & (np.nan_to_num(d[:, :, 0]) > 0)
 
 
 def quiet_sun(I, V, cont, valid):
@@ -278,7 +279,8 @@ def invert_cube(path, out, args, ME):
     scans = parse_scans(args.scans, cube.nscan)
     wav = cube.wavelengths_A(scans[0])
     segs = line_segments(wav)
-    cont = int(np.argmax(np.min([np.abs(wav - LINES[l]) for l, _ in segs], axis=0)))
+    dist_line = np.min([np.abs(wav - LINES[l]) for l, _ in segs], axis=0)
+    cont = int(np.argmax(dist_line))
     regions, pos, lines, nfine = build_regions(wav, args.dw, not args.no_profile)
     me = ME.MilneEddington(regions, lines, nthreads=args.nthreads,
                            precision="float32")
@@ -302,10 +304,23 @@ def invert_cube(path, out, args, ME):
         t0 = time.time()
         d = cube.scan(k, crop=args.crop, binning=args.bin)   # (ny, nx, 4, nw)
         ny, nx = d.shape[:2]
-        valid = valid_pixels(d)
+        # tunings without data in most of the field (not recorded / empty)
+        # are left out of this scan, as if not observed; pixels are judged
+        # on the others
+        good = tuning_good(d)
+        frac = good.mean(axis=(0, 1))
+        use = frac >= 0.5 * frac.max() if frac.max() > 0 else np.zeros(len(frac), bool)
+        if (~use).any() and use.any():
+            print(f"scan {k}: tunings {', '.join(f'{w:.3f}' for w in wav[~use])} A have "
+                  "no data in most of the field -- left out", flush=True)
+        valid = good[..., use].all(axis=-1) if use.any() else np.zeros((ny, nx), bool)
         if valid.sum() < 1000:
-            print(f"scan {k}: only {valid.sum()} valid pixels, skipped", flush=True)
+            print(f"scan {k}: only {valid.sum()} valid pixels, skipped; data fraction per "
+                  "tuning: " + " ".join(f"{w:.3f}:{f:.2f}" for w, f in zip(wav, frac)),
+                  flush=True)
             continue
+        cont = int(np.flatnonzero(use)[np.argmax(dist_line[use])])   # far-wing point
+        d[:, :, :, ~use] = 0.0
         d[~valid] = 0.0
         qs = quiet_sun(d[:, :, 0], d[:, :, 3], cont, valid)
         icq = float(np.median(d[:, :, 0, cont][qs]))
@@ -320,9 +335,10 @@ def invert_cube(path, out, args, ME):
         sig = np.full((4, nfine), 1e32, dtype=np.float32)
         for idx, p in pos:
             obs[:, :, :, p] = d[:, :, :, idx]
-            sig[0, p] = args.sigma_i
+            pu = p[use[idx]]                      # only tunings with data
+            sig[0, pu] = args.sigma_i
             for s in (1, 2, 3):
-                sig[s, p] = max(noise[s - 1], 1e-4)
+                sig[s, pu] = max(noise[s - 1], 1e-4)
         mu = cube.mu(k)
         rows = args.rows or max(1, 150_000 // nx)
         if prev is None or prev.shape[:2] != (ny, nx):
@@ -364,6 +380,7 @@ def invert_cube(path, out, args, ME):
         h["ICQS"] = (fin(icq), "quiet-Sun far-wing I [cube units]")
         h["NVALID"] = (int(valid.sum()), "pixels with data; rest NaN")
         h["WINGWAV"] = (float(wav[cont]), "far-wing wavelength [A]")
+        h["NTUNE"] = (int(use.sum()), "tunings used (rest: no data, left out)")
         h["SIGI"], h["SIGQ"], h["SIGU"], h["SIGV"] = args.sigma_i, *map(fin, noise)
         h["PROFILE"] = "none" if args.no_profile else "crisp dual_fpi erh=-0.001"
         h["NITER"] = args.niter
