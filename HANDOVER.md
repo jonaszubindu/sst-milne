@@ -71,6 +71,16 @@ an outflow or edge inflow is visible at SST but lost at HMI.
    Skips are now recorded in `skipped_scans.json` per cube (see
    `tools/me_status.py`).
 
+6. 2026-10-15, 2025-06-25 (`cubes_25.txt` -> `me_out_25` on the cluster,
+   job 110918): all 6 cubes done. The split 06:55 observation is now two
+   folders, `6302_2025-06-25T06-55-30` (135 scans) and `..._s135-267`
+   (133); the CUBE headers showed that the old shared folder held only
+   part 1's scans (part 2 had skipped everything as "exists"), so nothing
+   was lost. `...T10-54-22` (3 scans) is Stokes-I-only like the 06-17
+   cubes above and needs a re-reduction too. Build such lists with
+   `find -L <day> -name '*6302*_im.fits'`: the folders also hold other
+   `*6302*.fits` files that are not image cubes.
+
 ## Problems already solved (do not re-debug)
 
 - **pyMilne on Apple silicon** (`pymilne_build/setup_macos_arm64.py`):
