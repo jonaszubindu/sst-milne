@@ -126,7 +126,7 @@ cube tag (`<tag>_movie_me.mp4`, `<tag>_overview_scanNNNN.png`):
 
 ```bash
 sst-milne/tools/pull_quicklooks.sh ~/Desktop/me_quicklooks \
-    ubelix:/unibe/scratch/zbindenj/me_out ubelix:/unibe/scratch/zbindenj/me_out_17
+    fhnw_server:/unibe/scratch/zbindenj/me_out fhnw_server:/unibe/scratch/zbindenj/me_out_17
 ```
 
 ## Run

@@ -5,7 +5,7 @@
 #   <out>/<tag>/quicklook/overview_scan0025.png -> DEST/<tag>_overview_scan0025.png
 #
 #   tools/pull_quicklooks.sh ~/Desktop/me_quicklooks \
-#       ubelix:/unibe/scratch/zbindenj/me_out ubelix:/unibe/scratch/zbindenj/me_out_17
+#       fhnw_server:/unibe/scratch/zbindenj/me_out fhnw_server:/unibe/scratch/zbindenj/me_out_17
 #
 # Sources are rsync paths (host:/path or local). Only quicklook folders are
 # transferred (no inversion results), into DEST/.tree (kept, so a rerun

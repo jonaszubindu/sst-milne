@@ -28,6 +28,7 @@ an outflow or edge inflow is visible at SST but lost at HMI.
 
 | what | where |
 |---|---|
+| cluster login | `zbindenj_aiub@147.86.10.94` (owner's SSH alias `fhnw_server`), Slurm partition `aiub`, scratch `/unibe/scratch/zbindenj` |
 | this repo | GitHub `jonaszubindu/sst-milne` (private); Mac `~/Desktop/sst-milne`; sml server `/sml/zbindenj/sst-milne`; cluster `/unibe/scratch/zbindenj/sst-milne` |
 | pyMilne (upstream, unmodified) | Mac `~/Documents/GitHub/pyMilne` (built: `pyMilne.cpython-311-darwin.so`, conda env `Milne`); server `/sml/zbindenj/pyMilne` (venv `~/venvs/milne`, Python 3.8); cluster `/unibe/scratch/zbindenj/pyMilne` (conda env `milne`) -- all built |
 | AR 13010 cube | sml `/sml/zbindenj/idl/SST_data/4th_batch/2022-05-16/CRISP/nb_6302_2022-05-16T08:28:21_08:28:21=0-19_stokes_corrected_export2023-02-24T09:32:31_im.fits` — 20 scans, 13 tunings 6302.198–6302.758 Å, 1315×1313 px at 0.0592″/px, NaN padding |
@@ -83,6 +84,11 @@ an outflow or edge inflow is visible at SST but lost at HMI.
   script filters it, otherwise `tr '\r' '\n' < log | grep '^scan'`.
 - **ffmpeg**: `/usr/local/bin/ffmpeg` on the Mac is an x86 build that does
   not run; `me_quicklook.py` picks the first ffmpeg that actually runs.
+
+- **Pulling quicklooks**: run `tools/pull_quicklooks.sh` on the Mac (rsync
+  of `quicklook/` folders only). Do not use `scp -r` on the output folders:
+  it copies the ~0.4-0.5 GB `me_scan*.fits` files, and with several remote
+  arguments scp copies them INTO the last folder on the cluster.
 
 ## Open items / decisions for the owner
 
