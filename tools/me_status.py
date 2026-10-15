@@ -2,6 +2,8 @@
 """Which cubes of a list are inverted, and which have quicklooks?
 
   python tools/me_status.py cubes.txt /path/to/me_out [/path/to/me_out_17 ...]
+  python tools/me_status.py --array-only cubes.txt /path/to/me_out_17
+      # just the comma list of incomplete cubes (empty if none), for sbatch
 
 For every cube in the list (one path per line, as given to the Slurm
 array; relative paths are resolved from the current directory) it looks
@@ -24,9 +26,24 @@ from sstred import SSTRedCube   # noqa: E402
 
 
 def main():
-    if len(sys.argv) < 3:
+    argv = sys.argv[1:]
+    array_only = "--array-only" in argv
+    argv = [a for a in argv if a != "--array-only"]
+    if len(argv) < 2:
         sys.exit(__doc__)
-    lst, outs = pathlib.Path(sys.argv[1]), [pathlib.Path(p) for p in sys.argv[2:]]
+    if array_only:                      # silence the table, keep the list
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            inc = report(pathlib.Path(argv[0]), [pathlib.Path(p) for p in argv[1:]])
+        print(",".join(map(str, inc)))
+        return
+    report(pathlib.Path(argv[0]), [pathlib.Path(p) for p in argv[1:]])
+
+
+def report(lst, outs):
+    """Print the table; return the list indices of incomplete cubes."""
     cubes = [l.strip() for l in lst.read_text().splitlines() if l.strip()]
     incomplete, no_movie, unknown = [], [], []
     print(f"{'#':>3s}  {'cube tag':28s} {'scans':>5s} {'done':>5s}  overview  movie   folder")
@@ -78,6 +95,7 @@ def main():
         print(f"{len(no_movie)} cube folder(s) without an up-to-date movie, e.g.:\n"
               f"  python me_quicklook.py {' '.join(sorted({str(pathlib.Path(p).parent) for p in no_movie}))} "
               "--movie --skip-existing")
+    return inc
 
 
 if __name__ == "__main__":
