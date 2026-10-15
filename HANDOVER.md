@@ -61,6 +61,16 @@ an outflow or edge inflow is visible at SST but lost at HMI.
    (3 scans, 12 tunings, 2805x2821 px): rerun those tasks with that job's
    cube list and `me_out` (`tools/me_status.py` lists them).
 
+5. 2026-10-15: four 2025-06-17 cubes have **no polarimetry** in the
+   reduced data -- Q/U/V NaN everywhere, only Stokes I (and that in ~36 %
+   of the field, the rest padding): `6302_2025-06-17T10-26-05` (27 scans),
+   `...T12-38-46` (10), `...T14-53-01` (9), `...T16-00-07` (51). Not an
+   inversion problem: they need a re-reduction / re-export with Stokes
+   (SSTRED polcal) before ME can be run. `...T08-03-03` (8/9 scans) and
+   `...T09-20-37` (19/31) are probably partly affected the same way.
+   Skips are now recorded in `skipped_scans.json` per cube (see
+   `tools/me_status.py`).
+
 ## Problems already solved (do not re-debug)
 
 - **pyMilne on Apple silicon** (`pymilne_build/setup_macos_arm64.py`):
@@ -76,6 +86,9 @@ an outflow or edge inflow is visible at SST but lost at HMI.
   from statistics, given a quiet-Sun profile during the fit, NaN in output.
 - **Empty tunings**: left out per scan; the far-wing reference moves to the
   farthest tuning with data (header `WINGWAV`, `NTUNE`).
+- **Scans without Q/U/V** (Stokes-I-only reductions): skipped with the
+  reason "no Q/U/V (Stokes I only)", recorded in `skipped_scans.json`;
+  `me_status.py` counts them as done-but-skipped, not as missing.
 - **FITS headers reject NaN** → `fin()` writes 'NaN' strings.
 - **Background runs**: `nohup sh -c "python ..."` picked a Python without
   the packages; use the full interpreter path or `python -u` directly;

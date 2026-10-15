@@ -34,6 +34,7 @@ scale, normalisation, noise, settings. Existing scans are skipped
 """
 
 import argparse
+import json
 import os
 import pathlib
 import sys
@@ -292,6 +293,10 @@ def invert_cube(path, out, args, ME):
           f"{'off' if args.no_profile else 'on'}", flush=True)
 
     prev = None
+    # scans skipped for missing data, with the reason -- tools/me_status.py
+    # counts them as done instead of listing the cube for a rerun
+    skip_file = out / "skipped_scans.json"
+    skipped = json.loads(skip_file.read_text()) if skip_file.exists() else {}
     for k in scans:
         fout = out / f"me_scan{k:04d}.fits"
         if fout.exists() and not args.overwrite:
@@ -315,9 +320,17 @@ def invert_cube(path, out, args, ME):
                   "no data in most of the field -- left out", flush=True)
         valid = good[..., use].all(axis=-1) if use.any() else np.zeros((ny, nx), bool)
         if valid.sum() < 1000:
-            print(f"scan {k}: only {valid.sum()} valid pixels, skipped; data fraction per "
-                  "tuning: " + " ".join(f"{w:.3f}:{f:.2f}" for w, f in zip(wav, frac)),
+            with np.errstate(invalid="ignore"):
+                fin_i = float(np.isfinite(d[:, :, 0]).all(axis=-1).mean())
+                fin_quv = float(np.isfinite(d[:, :, 1:]).all(axis=(2, 3)).mean())
+            reason = ("no Q/U/V (Stokes I only)" if fin_i > 0 and fin_quv == 0 else
+                      f"only {valid.sum()} valid pixels")
+            print(f"scan {k}: {reason}, skipped; data fraction per tuning: "
+                  + " ".join(f"{w:.3f}:{f:.2f}" for w, f in zip(wav, frac))
+                  + f"; I finite in {fin_i:.2f}, Q/U/V in {fin_quv:.2f} of the field",
                   flush=True)
+            skipped[str(k)] = reason
+            skip_file.write_text(json.dumps(skipped, indent=1))
             continue
         cont = int(np.flatnonzero(use)[np.argmax(dist_line[use])])   # far-wing point
         d[:, :, :, ~use] = 0.0
