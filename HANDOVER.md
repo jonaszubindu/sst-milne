@@ -86,6 +86,15 @@ an outflow or edge inflow is visible at SST but lost at HMI.
   from statistics, given a quiet-Sun profile during the fit, NaN in output.
 - **Empty tunings**: left out per scan; the far-wing reference moves to the
   farthest tuning with data (header `WINGWAV`, `NTUNE`).
+- **Split observations** (SSTRED splits a too-large series into cubes with
+  the same start time, e.g. `...T06:55:31=0-39` and `=40-79`): cube_tag
+  used to ignore the scan range, so both parts shared one folder and
+  overwrote / skipped each other's `me_scanNNNN.fits` (2025-06-25 06:55 in
+  `me_out_25`). Now parts not starting at scan 0 get `_s<a>-<b>`, a scan
+  file whose `CUBE` header names another cube is redone, and me_status
+  warns about shared folders. Merging the parts into one time series is
+  not done (scan numbers restart at 0 in each part; the true numbers are
+  in the cube's `VAR-EXT-SCANNUM`).
 - **Scans without Q/U/V** (Stokes-I-only reductions): skipped with the
   reason "no Q/U/V (Stokes I only)", recorded in `skipped_scans.json`;
   `me_status.py` counts them as done-but-skipped, not as missing.

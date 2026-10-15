@@ -195,10 +195,18 @@ def find_cubes(inputs, pattern):
 
 
 def cube_tag(path):
-    """Short, unique output name for a cube: 'nb_6302_2022-05-16T08:28:21_...'
-    -> '6302_2022-05-16T08-28-21'."""
+    """Output folder name for a cube: 'nb_6302_2022-05-16T08:28:21_...'
+    -> '6302_2022-05-16T08-28-21'. A cube whose scan range does not start
+    at 0 ('...=40-79_...', the later part of an observation SSTRED split
+    in two with the same start time) gets the range appended,
+    '..._s40-79', so the parts do not share a folder; tags of cubes
+    starting at scan 0 are unchanged (existing results stay valid)."""
+    import re
     parts = path.name.split("_")
     tag = "_".join(parts[1:3]) if len(parts) > 2 else path.stem
+    m = re.search(r"=(\d+)-(\d+)", path.name)
+    if m and int(m.group(1)) != 0:
+        tag += f"_s{m.group(1)}-{m.group(2)}"
     return tag.replace(":", "-")
 
 
@@ -300,12 +308,19 @@ def invert_cube(path, out, args, ME):
     for k in scans:
         fout = out / f"me_scan{k:04d}.fits"
         if fout.exists() and not args.overwrite:
-            # resume: the next scan starts from this scan's saved result
-            prev = np.ascontiguousarray(
-                fits.getdata(fout)[:len(PARAMS)].transpose(1, 2, 0),
-                dtype=np.float64)
-            print(f"scan {k}: exists, skipped", flush=True)
-            continue
+            src = fits.getheader(fout).get("CUBE", "")
+            if src and src != os.path.basename(cube.path):
+                # written by another cube that shared this folder (split
+                # observations before cube_tag told the parts apart): redo
+                print(f"scan {k}: {fout.name} belongs to {src} -- redone for "
+                      "this cube", flush=True)
+            else:
+                # resume: the next scan starts from this scan's saved result
+                prev = np.ascontiguousarray(
+                    fits.getdata(fout)[:len(PARAMS)].transpose(1, 2, 0),
+                    dtype=np.float64)
+                print(f"scan {k}: exists, skipped", flush=True)
+                continue
         t0 = time.time()
         d = cube.scan(k, crop=args.crop, binning=args.bin)   # (ny, nx, 4, nw)
         ny, nx = d.shape[:2]

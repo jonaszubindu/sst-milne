@@ -47,6 +47,10 @@ def main():
 def report(lst, outs):
     """Print the table; return the list indices of incomplete cubes."""
     cubes = [l.strip() for l in lst.read_text().splitlines() if l.strip()]
+    tags = [cube_tag(pathlib.Path(c)) for c in cubes]
+    for t in sorted({t for t in tags if tags.count(t) > 1}):
+        print(f"WARNING: cubes {[i for i, x in enumerate(tags) if x == t]} share the "
+              f"output folder {t} -- update sst-milne (cube_tag) before running them")
     incomplete, no_movie, unknown = [], [], []
     print(f"{'#':>3s}  {'cube tag':28s} {'scans':>5s} {'done':>5s} {'skip':>4s}  overview  movie   folder")
     import json
