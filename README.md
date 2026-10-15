@@ -129,6 +129,26 @@ sst-milne/tools/pull_quicklooks.sh ~/Desktop/me_quicklooks \
     fhnw_server:/unibe/scratch/zbindenj/me_out fhnw_server:/unibe/scratch/zbindenj/me_out_17
 ```
 
+## Data validity check
+
+Before inverting, check the cubes (works for Fe I 6302 and Ca II 8542
+alike; identical script in sst-milne and sst-wfa):
+
+```bash
+python tools/check_cubes.py /path/to/SST_data/ --plot validity --csv validity
+```
+
+Per cube it reports maps that are entirely NaN or zero (per Stokes,
+tuning and scan), Q/U/V zero-filled where I has data (the inversions would
+silently fit Q = 0 there), infinite values, partial maps, scans the
+inversions would skip and tunings they would leave out, intensity jumps
+between scans, noisy scans, and time/wavelength inconsistencies; ERROR /
+WARN / INFO lines, a summary table and exit code 1 on any ERROR.
+`--stride 4` (default) samples every 4th row and column: whole-map
+problems are always found, isolated bad pixels need `--stride 1` (reads
+the whole cube). `--quiet` drops the INFO lines; `--pattern
+'nb_8542*_im.fits'` restricts a folder to one line.
+
 ## Run
 
 ```bash
@@ -197,3 +217,4 @@ the first scan takes ~4x longer.
 | `slurm/me_quicklook.sbatch` | missing/outdated quicklooks on a compute node |
 | `tools/me_status.py` | which cubes are inverted and have quicklooks |
 | `tools/pull_quicklooks.sh` | quicklooks of all cubes into one local folder, renamed by cube |
+| `tools/check_cubes.py` | data validity check of 6302 / 8542 cubes (NaN/zero maps, skipped scans, ...) |
